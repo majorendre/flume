@@ -18,12 +18,14 @@
 
 package org.apache.flume.sink.kafka.util;
 
+/*
 import kafka.consumer.ConsumerConfig;
 import kafka.consumer.ConsumerIterator;
 import kafka.consumer.ConsumerTimeoutException;
 import kafka.consumer.KafkaStream;
 import kafka.javaapi.consumer.ConsumerConnector;
 import kafka.message.MessageAndMetadata;
+*/
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +46,7 @@ public class KafkaConsumer {
   private static final Logger logger = LoggerFactory.getLogger(
       KafkaConsumer.class);
 
-  private final ConsumerConnector consumer;
+/*  private final ConsumerConnector consumer;
   Map<String, List<KafkaStream<byte[], byte[]>>> consumerMap;
 
   public KafkaConsumer() {
@@ -95,4 +97,5 @@ public class KafkaConsumer {
   public void shutdown() {
     consumer.shutdown();
   }
+  */
 }

@@ -18,18 +18,15 @@
 
 package org.apache.flume.sink.kafka.util;
 
-import kafka.message.MessageAndMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.BindException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Properties;
-import java.util.Random;
 
 /**
  * A utility class for starting/stopping Kafka Server.
@@ -109,7 +106,7 @@ public class TestUtil {
     return kafkaConsumer;
   }
 
-  public void initTopicList(List<String> topics) {
+/*  public void initTopicList(List<String> topics) {
     getKafkaConsumer().initTopicList(topics);
   }
 
@@ -145,7 +142,7 @@ public class TestUtil {
     kafkaServer.stop();
     logger.info("Completed the tearDown phase.");
   }
-
+*/
   private synchronized int getNextPort() throws IOException {
     try (ServerSocket socket = new ServerSocket(0)) {
       return socket.getLocalPort();
