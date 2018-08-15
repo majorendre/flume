@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.flume.Channel;
@@ -132,7 +133,7 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
   private Clock clock;
   private FileSystem mockFs;
   private HDFSWriter mockWriter;
-  private final Object sfWritersLock = new Object();
+  private final ReentrantReadWriteLock sfWritersLock = new ReentrantReadWriteLock();
   private long retryInterval;
   private int tryCount;
   private PrivilegedExecutor privExecutor;
@@ -380,21 +381,16 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
           @Override
           public void run(String bucketPath) {
             LOG.info("Writer callback called.");
-            synchronized (sfWritersLock) {
+            sfWritersLock.writeLock().lock();
+            try {
               sfWriters.remove(bucketPath);
+            } finally {
+              sfWritersLock.writeLock().unlock();
             }
           }
         };
-        synchronized (sfWritersLock) {
-          bucketWriter = sfWriters.get(lookupPath);
-          // we haven't seen this file yet, so open it and cache the handle
-          if (bucketWriter == null) {
-            hdfsWriter = writerFactory.getWriter(fileType);
-            bucketWriter = initializeBucketWriter(realPath, realName,
-              lookupPath, hdfsWriter, closeCallback);
-            sfWriters.put(lookupPath, bucketWriter);
-          }
-        }
+
+        bucketWriter = getOrCreateBucketWriter(realPath, realName, lookupPath, closeCallback);
 
         // Write the data to HDFS
         try {
@@ -405,8 +401,12 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
           hdfsWriter = writerFactory.getWriter(fileType);
           bucketWriter = initializeBucketWriter(realPath, realName,
             lookupPath, hdfsWriter, closeCallback);
-          synchronized (sfWritersLock) {
+
+          sfWritersLock.writeLock().lock();
+          try {
             sfWriters.put(lookupPath, bucketWriter);
+          } finally {
+            sfWritersLock.writeLock().unlock();
           }
           bucketWriter.append(event);
         }
@@ -455,6 +455,37 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
     }
   }
 
+  private BucketWriter getOrCreateBucketWriter(String realPath, String realName, String lookupPath,
+                                               WriterCallback closeCallback) throws IOException {
+    BucketWriter bucketWriter;
+    sfWritersLock.readLock().lock();
+    try {
+      bucketWriter = sfWriters.get(lookupPath);
+      // we haven't seen this file yet, so open it and cache the handle
+      if (bucketWriter == null) {
+        sfWritersLock.readLock().unlock();
+        sfWritersLock.writeLock().lock();
+        try {
+          // recheck, because another state might have created the bucketWriter
+          // when we switched to write lock
+          bucketWriter = sfWriters.get(lookupPath);
+          if (bucketWriter == null) {
+            HDFSWriter hdfsWriter = writerFactory.getWriter(fileType);
+            bucketWriter = initializeBucketWriter(realPath, realName,
+                lookupPath, hdfsWriter, closeCallback);
+            sfWriters.put(lookupPath, bucketWriter);
+          }
+        } finally {
+          sfWritersLock.readLock().lock();
+          sfWritersLock.writeLock().unlock();
+        }
+      }
+    } finally {
+      sfWritersLock.readLock().unlock();
+    }
+    return bucketWriter;
+  }
+
   @VisibleForTesting
   BucketWriter initializeBucketWriter(String realPath,
       String realName, String lookupPath, HDFSWriter hdfsWriter,
@@ -465,7 +496,7 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
         suffix, codeC, compType, hdfsWriter, timedRollerPool,
         privExecutor, sinkCounter, idleTimeout, closeCallback,
         lookupPath, callTimeout, callTimeoutPool, retryInterval,
-        tryCount);
+        tryCount, sfWritersLock);
     if (mockFs != null) {
       bucketWriter.setFileSystem(mockFs);
       bucketWriter.setMockStream(mockWriter);
@@ -476,7 +507,8 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
   @Override
   public void stop() {
     // do not constrain close() calls with a timeout
-    synchronized (sfWritersLock) {
+    sfWritersLock.readLock().lock();
+    try {
       for (Entry<String, BucketWriter> entry : sfWriters.entrySet()) {
         LOG.info("Closing {}", entry.getKey());
 
@@ -490,6 +522,8 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
           }
         }
       }
+    } finally {
+      sfWritersLock.readLock().unlock();
     }
 
     // shut down all our thread pools
@@ -509,9 +543,12 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
     callTimeoutPool = null;
     timedRollerPool = null;
 
-    synchronized (sfWritersLock) {
+    sfWritersLock.writeLock().lock();
+    try {
       sfWriters.clear();
       sfWriters = null;
+    } finally {
+      sfWritersLock.writeLock().unlock();
     }
     sinkCounter.stop();
     super.stop();

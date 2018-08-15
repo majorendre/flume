@@ -19,6 +19,7 @@
 package org.apache.flume.sink.hdfs;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.apache.flume.Clock;
 import org.apache.flume.Context;
@@ -50,6 +51,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Internal API intended for HDFSSink use.
@@ -115,6 +118,8 @@ class BucketWriter {
   protected boolean closed = false;
   AtomicInteger renameTries = new AtomicInteger(0);
 
+  private final ReentrantReadWriteLock sfWritersLock;
+
   BucketWriter(long rollInterval, long rollSize, long rollCount, long batchSize,
       Context context, String filePath, String fileName, String inUsePrefix,
       String inUseSuffix, String fileSuffix, CompressionCodec codeC,
@@ -123,7 +128,8 @@ class BucketWriter {
       SinkCounter sinkCounter, int idleTimeout, WriterCallback onCloseCallback,
       String onCloseCallbackPath, long callTimeout,
       ExecutorService callTimeoutPool, long retryInterval,
-      int maxCloseTries) {
+      int maxCloseTries, ReentrantReadWriteLock sfWritersLock) {
+
     this(rollInterval, rollSize, rollCount, batchSize,
             context, filePath, fileName, inUsePrefix,
             inUseSuffix, fileSuffix, codeC,
@@ -132,7 +138,7 @@ class BucketWriter {
             sinkCounter, idleTimeout, onCloseCallback,
             onCloseCallbackPath, callTimeout,
             callTimeoutPool, retryInterval,
-            maxCloseTries, new SystemClock());
+            maxCloseTries, new SystemClock(), sfWritersLock);
   }
 
   BucketWriter(long rollInterval, long rollSize, long rollCount, long batchSize,
@@ -143,7 +149,9 @@ class BucketWriter {
            SinkCounter sinkCounter, int idleTimeout, WriterCallback onCloseCallback,
            String onCloseCallbackPath, long callTimeout,
            ExecutorService callTimeoutPool, long retryInterval,
-           int maxCloseTries, Clock clock) {
+           int maxCloseTries, Clock clock, ReentrantReadWriteLock sfWritersLock) {
+    Preconditions.checkNotNull(sfWritersLock);
+
     this.rollInterval = rollInterval;
     this.rollSize = rollSize;
     this.rollCount = rollCount;
@@ -171,6 +179,7 @@ class BucketWriter {
     isOpen = false;
     isUnderReplicated = false;
     this.writer.configure(context);
+    this.sfWritersLock = sfWritersLock;
   }
 
   @VisibleForTesting
@@ -315,7 +324,7 @@ class BucketWriter {
    * @throws IOException On failure to rename if temp file exists.
    * @throws InterruptedException
    */
-  public synchronized void close() throws IOException, InterruptedException {
+  public void close() throws IOException, InterruptedException {
     close(false);
   }
 
@@ -381,8 +390,27 @@ class BucketWriter {
    * @throws IOException On failure to rename if temp file exists.
    * @throws InterruptedException
    */
-  public synchronized void close(boolean callCloseCallback)
+  public void close(boolean callCloseCallback)
       throws IOException, InterruptedException {
+    if (callCloseCallback) {
+      sfWritersLock.writeLock().lock();
+    }
+    try {
+      synchronizedClose(callCloseCallback);
+    } finally {
+      if (callCloseCallback) {
+        sfWritersLock.writeLock().unlock();
+      }
+    }
+  }
+
+  private synchronized void synchronizedClose(boolean callCloseCallback)
+      throws IOException, InterruptedException {
+    if (callCloseCallback && !sfWritersLock.writeLock().isHeldByCurrentThread()) {
+      throw new IllegalStateException("synchronizedClose(true) should be called only by a thread " +
+          "holding sfWritersLock.writeLock");
+    }
+
     checkAndThrowInterruptedException();
     try {
       flush();
