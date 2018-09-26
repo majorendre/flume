@@ -485,8 +485,8 @@ public class TestBucketWriter {
     bucketWriter.close(false);
     TimeUnit.SECONDS.sleep(numberOfRetriesRequired + 2);
     Assert.assertTrue("Expected " + numberOfRetriesRequired + " " +
-        "but got " + mockHDFSWriter.currentCloseAttempts.get(),
-        mockHDFSWriter.currentCloseAttempts.get() == numberOfRetriesRequired);
+        "but got " + mockHDFSWriter.currentCloseAttempts,
+        mockHDFSWriter.currentCloseAttempts == numberOfRetriesRequired);
   }
 
   // Test that we don't swallow IOExceptions in secure mode. We should close the bucket writer

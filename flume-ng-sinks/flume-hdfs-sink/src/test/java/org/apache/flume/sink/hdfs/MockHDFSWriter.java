@@ -35,10 +35,9 @@ public class MockHDFSWriter implements HDFSWriter {
   private int bytesWritten = 0;
   private int eventsWritten = 0;
   private String filePath = null;
-  private static final Logger logger =
-      LoggerFactory.getLogger(MockHDFSWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(MockHDFSWriter.class);
   private int numberOfRetriesRequired;
-  public volatile AtomicLong currentCloseAttempts = new AtomicLong(0L);
+  public volatile int currentCloseAttempts = 0;
 
   public MockHDFSWriter(int numberOfRetriesRequired) {
     this.numberOfRetriesRequired = numberOfRetriesRequired;
@@ -68,13 +67,6 @@ public class MockHDFSWriter implements HDFSWriter {
     return filePath;
   }
 
-  public void clear() {
-    filesOpened = 0;
-    filesClosed = 0;
-    bytesWritten = 0;
-    eventsWritten = 0;
-  }
-
   public void configure(Context context) {
     // no-op
   }
@@ -101,10 +93,10 @@ public class MockHDFSWriter implements HDFSWriter {
 
   public void close() throws IOException {
     filesClosed++;
-    currentCloseAttempts.incrementAndGet();
+    currentCloseAttempts++;
     logger.info("Attempting to close: '" + currentCloseAttempts + "' of '" +
         numberOfRetriesRequired + "'");
-    if (currentCloseAttempts.get() >= numberOfRetriesRequired || numberOfRetriesRequired == 0) {
+    if (currentCloseAttempts >= numberOfRetriesRequired || numberOfRetriesRequired == 0) {
       logger.info("closing file");
 
     } else {

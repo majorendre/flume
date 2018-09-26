@@ -459,16 +459,16 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
   BucketWriter initializeBucketWriter(String realPath,
       String realName, String lookupPath, HDFSWriter hdfsWriter,
       WriterCallback closeCallback) {
+    HDFSWriter actualHdfsWriter = mockFs == null ? hdfsWriter : mockWriter;
     BucketWriter bucketWriter = new BucketWriter(rollInterval,
         rollSize, rollCount,
         batchSize, context, realPath, realName, inUsePrefix, inUseSuffix,
-        suffix, codeC, compType, hdfsWriter, timedRollerPool,
+        suffix, codeC, compType, actualHdfsWriter, timedRollerPool,
         privExecutor, sinkCounter, idleTimeout, closeCallback,
         lookupPath, callTimeout, callTimeoutPool, retryInterval,
         tryCount);
     if (mockFs != null) {
       bucketWriter.setFileSystem(mockFs);
-      bucketWriter.setMockStream(mockWriter);
     }
     return bucketWriter;
   }
@@ -481,7 +481,7 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
         LOG.info("Closing {}", entry.getKey());
 
         try {
-          entry.getValue().close();
+          entry.getValue().close(false, true);
         } catch (Exception ex) {
           LOG.warn("Exception while closing " + entry.getKey() + ". " +
                   "Exception follows.", ex);
