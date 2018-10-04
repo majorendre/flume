@@ -532,8 +532,13 @@ public class KafkaSource extends AbstractPollableSource
     // Subscribe for topics by already specified strategy
     subscriber.subscribe(consumer, new SourceRebalanceListener(rebalanceFlag));
 
-    // Connect to kafka. 1 second is optimal time.
-    it = consumer.poll(1000).iterator();
+    try {
+      // Connect to kafka. 1 second is optimal time.
+      it = consumer.poll(1000).iterator();
+    } catch (Exception e) {
+      log.warn("Could not connect to Kafka at startup. Will retry later", e);
+      throw e;
+    }
     log.info("Kafka source {} started.", getName());
     counter.start();
   }

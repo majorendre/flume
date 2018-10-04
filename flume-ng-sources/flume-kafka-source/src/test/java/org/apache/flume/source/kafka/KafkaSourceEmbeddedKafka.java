@@ -57,6 +57,10 @@ public class KafkaSourceEmbeddedKafka {
   File dir;
 
   public KafkaSourceEmbeddedKafka(Properties properties) {
+    this(properties, true);
+  }
+
+  public KafkaSourceEmbeddedKafka(Properties properties, boolean start) {
     zookeeper = new KafkaSourceEmbeddedZookeeper(zkPort);
     dir = new File(System.getProperty("java.io.tmpdir"), "kafka_log-" + UUID.randomUUID());
     try {
@@ -75,6 +79,12 @@ public class KafkaSourceEmbeddedKafka {
     }
     KafkaConfig config = new KafkaConfig(props);
     kafkaServer = new KafkaServerStartable(config);
+    if (start) {
+      start();
+    }
+  }
+
+  public void start() {
     kafkaServer.startup();
     initProducer();
   }
