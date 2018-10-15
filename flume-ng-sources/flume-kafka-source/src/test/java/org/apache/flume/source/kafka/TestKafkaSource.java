@@ -365,6 +365,7 @@ public class TestKafkaSource {
     context.put(BATCH_DURATION_MS, "250");
     kafkaSource.configure(context);
     startKafkaSource();
+    kafkaSource.process(); //timing magic
 
     Thread.sleep(500L);
 
