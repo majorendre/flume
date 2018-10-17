@@ -134,7 +134,6 @@ public class TestUtil {
   private Properties createAdminClientProperties() {
     final Properties props = new Properties();
     props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, getKafkaServerUrl());
-    props.put(ConsumerConfig.GROUP_ID_CONFIG, "group_1");
     return props;
   }
 
